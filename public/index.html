@@ -1,0 +1,694 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>🐺 Werewolf Multiplayer</title>
+
+<style>
+body{
+  margin:0;
+  background:#0d0f18;
+  color:#fff;
+  font-family:system-ui,sans-serif;
+  max-width:760px;
+  margin:auto;
+  padding:16px
+}
+
+section{
+  background:#191c2a;
+  padding:18px;
+  border-radius:18px;
+  margin:12px 0
+}
+
+input,button,select{
+  width:100%;
+  padding:13px;
+  margin:5px 0;
+  border-radius:11px;
+  border:1px solid #41465f;
+  background:#10121b;
+  color:#fff;
+  font-size:16px;
+  box-sizing:border-box
+}
+
+button{
+  background:#6e4cff;
+  border:0;
+  font-weight:800
+}
+
+.alt{
+  background:#292d40
+}
+
+.hidden{
+  display:none
+}
+
+.code{
+  text-align:center;
+  font-size:32px;
+  font-weight:900;
+  letter-spacing:5px
+}
+
+.p{
+  padding:10px;
+  background:#292d40;
+  border-radius:9px;
+  margin:5px 0
+}
+
+.dead{
+  text-decoration:line-through;
+  opacity:.45
+}
+
+.role{
+  text-align:center;
+  font-size:32px;
+  font-weight:900
+}
+
+.skill{
+  font-weight:800;
+  margin-top:12px
+}
+
+.log{
+  background:#090b11;
+  padding:12px;
+  border-radius:10px;
+  margin-top:10px
+}
+
+.grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:8px
+}
+
+@media(max-width:500px){
+  .grid{
+    grid-template-columns:1fr
+  }
+}
+</style>
+</head>
+
+<body>
+
+<section id="home">
+
+<h1>🐺 Werewolf Multiplayer</h1>
+
+<p>10 pemain • role rahasia • real-time</p>
+
+<h3>🏠 Buat Room</h3>
+
+<input id="roomName" placeholder="Nama Room">
+
+<input id="roomCode" placeholder="Kode Room">
+
+<input id="name" placeholder="Nama kamu">
+
+<div class="grid">
+
+<button onclick="create(1)">
+Buat + Saya Bermain
+</button>
+
+<button class="alt" onclick="create(0)">
+Moderator Saja
+</button>
+
+</div>
+
+<hr>
+
+<h3>🚪 Gabung Room</h3>
+
+<input id="joinCode" placeholder="Kode Room">
+
+<input id="joinName" placeholder="Nama pemain">
+
+<button onclick="joinRoom()">
+Gabung Room
+</button>
+
+</section>
+
+
+<section id="lobby" class="hidden">
+
+<h2 id="title"></h2>
+
+<div id="code" class="code"></div>
+
+<p id="count"></p>
+
+<div id="players"></div>
+
+<button id="start" class="hidden" onclick="startGame()">
+▶️ Mulai Game (10 Pemain)
+</button>
+
+</section>
+
+
+<section id="private" class="hidden">
+
+<h2>🎴 Role Rahasiamu</h2>
+
+<div id="role"></div>
+
+</section>
+
+
+<section id="game" class="hidden">
+
+<h2 id="phase"></h2>
+
+<div id="actions"></div>
+
+<div id="announce" class="log"></div>
+
+<h3>👥 Status Pemain</h3>
+
+<div id="status"></div>
+
+<div id="mods" class="hidden">
+
+<h3>🎛️ Kontrol Moderator</h3>
+
+<button onclick="phase('morning')">
+☀️ Buka Pagi
+</button>
+
+<button onclick="phase('voting')">
+🗳️ Mulai Voting
+</button>
+
+<button onclick="finishVote()">
+📢 Akhiri Voting
+</button>
+
+<button onclick="phase('night')">
+🌙 Malam Berikutnya
+</button>
+
+</div>
+
+</section>
+
+
+<script src="/socket.io/socket.io.js"></script>
+
+<script>
+
+const s = io();
+
+const $ = id => document.getElementById(id);
+
+let host = false;
+
+
+function create(play){
+
+  host = true;
+
+  s.emit(
+    "createRoom",
+    {
+      roomName:$("roomName").value,
+      roomCode:$("roomCode").value,
+      name:$("name").value,
+      play:play
+    },
+    r=>{
+
+      if(r.error){
+        alert(r.error);
+        return;
+      }
+
+      $("home").classList.add("hidden");
+
+      $("lobby").classList.remove("hidden");
+
+    }
+  );
+
+}
+
+
+function joinRoom(){
+
+  host = false;
+
+  s.emit(
+    "joinRoom",
+    {
+      code:$("joinCode").value,
+      name:$("joinName").value
+    },
+    r=>{
+
+      if(r.error){
+        alert(r.error);
+        return;
+      }
+
+      $("home").classList.add("hidden");
+
+      $("lobby").classList.remove("hidden");
+
+    }
+  );
+
+}
+
+
+function startGame(){
+
+  s.emit(
+    "startGame",
+    {},
+    r=>{
+
+      if(r && r.error){
+        alert(r.error);
+      }
+
+    }
+  );
+
+}
+
+
+function phase(p){
+
+  s.emit(
+    "moderatorPhase",
+    p
+  );
+
+}
+
+
+function finishVote(){
+
+  s.emit("finishVote");
+
+}
+
+
+s.on("state",r=>{
+
+  $("title").textContent =
+    "🐺 " + r.name;
+
+  $("code").textContent =
+    r.code;
+
+  $("count").textContent =
+    `${r.players.length}/10 • ${r.phase}`;
+
+  $("players").innerHTML =
+    r.players.map(p=>`
+
+      <div class="p ${p.alive ? "" : "dead"}">
+
+        ${p.name}
+
+        ${p.isHost ? "👑" : ""}
+
+        ${p.alive ? "🟢" : "💀"}
+
+      </div>
+
+    `).join("");
+
+
+  if(
+    host &&
+    r.phase==="lobby" &&
+    r.players.length===10
+  ){
+
+    $("start").classList.remove("hidden");
+
+  }
+
+
+  if(r.phase!=="lobby"){
+
+    $("game").classList.remove("hidden");
+
+    $("phase").textContent =
+      r.phase +
+      (r.night ? " • Malam " + r.night : "");
+
+  }
+
+
+  if(host){
+
+    $("mods").classList.remove("hidden");
+
+  }
+
+
+  $("status").innerHTML =
+    r.players.map(p=>`
+
+      <div class="p ${p.alive ? "" : "dead"}">
+
+        ${p.name}
+
+        ${p.alive ? "🟢" : "💀"}
+
+      </div>
+
+    `).join("");
+
+});
+
+
+s.on("privateRole",r=>{
+
+  $("private").classList.remove("hidden");
+
+  $("role").innerHTML = `
+
+    <div class="role">
+      ${r.emoji} ${r.role}
+    </div>
+
+    <p>
+      <b>Tim:</b> ${r.team}
+    </p>
+
+    <div class="skill">
+      ⚡ Skill
+    </div>
+
+    <p>
+      ${r.skill}
+    </p>
+
+    <div class="skill">
+      🏆 Kondisi Menang
+    </div>
+
+    <p>
+      ${r.win}
+    </p>
+
+  `;
+
+});
+
+
+function box(title,type,targets){
+
+  return `
+
+    <div>
+
+      <b>${title}</b>
+
+      <select id="${type}">
+
+        ${targets.map(x=>`
+
+          <option value="${x.id}">
+            ${x.name}
+          </option>
+
+        `).join("")}
+
+      </select>
+
+      <button
+        onclick="act('${type}',document.getElementById('${type}').value)"
+      >
+        Konfirmasi
+      </button>
+
+    </div>
+
+  `;
+
+}
+
+
+function act(type,target){
+
+  s.emit(
+    "action",
+    {
+      type:type,
+      target:target
+    }
+  );
+
+}
+
+
+s.on("nightPrompt",n=>{
+
+  let h =
+    `<p>🌙 Malam ${n.night}</p>`;
+
+
+  if(
+    n.role==="Werewolf" ||
+    n.role==="Alpha"
+  ){
+
+    h += box(
+      "🐺 Pilih korban",
+      "wolf",
+      n.targets
+    );
+
+  }
+
+
+  if(
+    n.role==="Alpha" &&
+    n.alpha
+  ){
+
+    h += `
+
+      <button
+        onclick="act('alphaPower','')"
+      >
+        👑 Aktifkan Serangan Alpha
+      </button>
+
+    `;
+
+  }
+
+
+  if(n.role==="Doctor"){
+
+    h += box(
+      "💊 Lindungi",
+      "doctor",
+      n.targets
+    );
+
+  }
+
+
+  if(n.role==="Bodyguard"){
+
+    h += box(
+      "🛡️ Jaga",
+      "guard",
+      n.targets
+    );
+
+  }
+
+
+  if(n.role==="Seer"){
+
+    h += box(
+      "👁️ Periksa",
+      "seer",
+      n.targets
+    );
+
+  }
+
+
+  if(n.role==="Witch"){
+
+    if(n.heal){
+
+      h += `
+
+        <button
+          onclick="act('witchHeal','')"
+        >
+          🧪 Gunakan Penyembuh
+        </button>
+
+      `;
+
+    }
+
+
+    if(n.poison){
+
+      h += box(
+        "☠️ Racun",
+        "witchPoison",
+        n.targets
+      );
+
+    }
+
+  }
+
+
+  $("actions").innerHTML = h;
+
+});
+
+
+s.on("votingPrompt",n=>{
+
+  $("actions").innerHTML = `
+
+    <div>
+
+      <b>🗳️ Pilih pemain yang ingin dikeluarkan</b>
+
+      <select id="voteTarget">
+
+        ${n.targets.map(x=>`
+
+          <option value="${x.id}">
+            ${x.name}
+          </option>
+
+        `).join("")}
+
+      </select>
+
+      <button onclick="
+        doVote(
+          document.getElementById('voteTarget').value
+        )
+      ">
+        Kirim Vote
+      </button>
+
+    </div>
+
+  `;
+
+});
+
+
+function doVote(target){
+
+  s.emit(
+    "vote",
+    target
+  );
+
+  alert(
+    "Suaramu sudah dicatat secara rahasia."
+  );
+
+}
+
+
+s.on("seerResult",x=>{
+
+  alert(
+    x.name +
+    ": " +
+    (
+      x.wolf
+      ? "🐺 Werewolf / Alpha"
+      : "❌ Bukan Werewolf"
+    )
+  );
+
+});
+
+
+s.on("announcement",x=>{
+
+  $("announce").textContent = x;
+
+});
+
+
+s.on("result",x=>{
+
+  alert(x);
+
+});
+
+
+s.on("hunterTurn",n=>{
+
+  $("actions").innerHTML = `
+
+    <div>
+
+      <b>🔫 Hunter: pilih target</b>
+
+      <select id="hunterTarget">
+
+        ${n.targets.map(x=>`
+
+          <option value="${x.id}">
+            ${x.name}
+          </option>
+
+        `).join("")}
+
+      </select>
+
+      <button onclick="
+        shoot(
+          document.getElementById('hunterTarget').value
+        )
+      ">
+        🔫 Tembak
+      </button>
+
+    </div>
+
+  `;
+
+});
+
+
+function shoot(target){
+
+  s.emit(
+    "hunter",
+    target
+  );
+
+}
+
+</script>
+
+</body>
+  </html>
